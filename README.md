@@ -1,2 +1,2 @@
 # pyplotc
-Use python to plot c "fprintf" function
+Use python to plot "fprintf" function of C/C++
