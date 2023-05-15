@@ -3,4 +3,7 @@ for (int i =0; i < 7 ; i++){
     fprintf(fwrite_data, "%f %f %f %f %f %f ", rc.Target[i], pc.JointCmd[i], rs.SlicedTar[i], rs.SimuPos[i], 
             rs.SimuVel[i], rs.null_joint_pos[i]);
 }
+for (int i=0; i <7; i++){
+    fprintf(fwrite_data, "%f ", rs.Pose[6][i]);
+}
 fprintf(fwrite_data, "\n");

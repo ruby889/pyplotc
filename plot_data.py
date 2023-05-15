@@ -1,17 +1,36 @@
 #!/home/ruby/miniconda3/envs/mujoco/bin/python
 import pandas as pd
 import matplotlib.pyplot as plt
+from pygnuplot import gnuplot
 import re
 from collections import defaultdict
 import sys
+
+def useMatplotlib(graph_indexs, graph_names):
+    for graph_i in range(len(graph_indexs)):
+        print(graph_indexs[graph_i], graph_names[graph_i])
+        df.iloc[:, graph_indexs[graph_i]].plot(title=graph_names[graph_i])
+        plt.legend(graph_indexs[graph_i])
+    plt.show()
+
+def useGnuplot(graph_indexs, graph_names):
+    for graph_i in range(len(graph_indexs)):
+        g = gnuplot.Gnuplot()
+        df.iloc[:, graph_indexs[graph_i]]
+        tt = [f'using {x} with lines' for x in graph_indexs[graph_i]]
+        g.plot_data(df, *tt, title= f'"{graph_names[graph_i]}"')
+    input("Press Enter to continue...")
+
 if __name__ == '__main__':
     structure_file = "writeFileStructure.txt"
     data_file = "~/robotics/build/33.txt"
 
     structure = defaultdict(list)
+    structure_index = {}
     structure_name = {}
     index = []
     cur_i = 0
+    #Analysis c++/c fprintf function
     with open(structure_file, "r") as f:
         for_loop_param = (0,1)
         prev_line = ''
@@ -34,7 +53,8 @@ if __name__ == '__main__':
                 #Save names
                 for i in range(cnt):
                     structure_name[i+cur_i] = names[i]
-                    
+                    structure_index[names[i]] = i+cur_i
+
                 #Save data index
                 for i in range(*for_loop_param):
                     for j in range(cur_i, cnt+cur_i):
@@ -47,15 +67,31 @@ if __name__ == '__main__':
                 for_loop_param = (int(params[0].strip()[-1]), int(params[1].strip()[-1]))
             prev_line = ''
 
+    '''
+    Analysis sys.argv
+    e.g. plot_data.py 0,3 5  : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. plot_data.py Target : plot graph by its name
+    '''
     df = pd.read_csv(data_file, sep=" ")
-    if (sys.argv == 'all' or len(sys.argv) == 1):
+    graph_indexs, graph_names = [], []
+    if len(sys.argv) == 1:
         keys = structure.keys()
+        graph_indexs = structure[keys]
+        graph_names = structure_name[keys]
     else:
-        keys = [int(x) for x in sys.argv[1].split(',')]
+        for cmd in sys.argv[1:]:
+            graph_indexs.append([])
+            graph_names.append("")
+            for key in cmd.split(','): 
+                key = int(key) if key.isnumeric() else structure_index[key]
+                graph_indexs[-1].extend(structure[key])
+                graph_names[-1] += structure_name[key] + ", "
+            graph_names[-1] = graph_names[-1][:-2] #Remove last ','
+    
+    # Plot with gnuplot
+    useGnuplot(graph_indexs, graph_names)
 
-    for key in keys:
-        df.iloc[:, structure[key]].plot(title=structure_name[key])
-        plt.legend(structure[key])
-    plt.show()
+    # # Plot with matplotlib
+    # useMatplotlib(graph_indexs, graph_names)
     
     
