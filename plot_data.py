@@ -6,6 +6,9 @@ import re
 from collections import defaultdict
 import sys
 
+structure_file = "writeFileStructure.txt"
+data_file = "~/robotics/build/33.txt"
+
 def useMatplotlib(graph_indexs, graph_names):
     for graph_i in range(len(graph_indexs)):
         print(graph_indexs[graph_i], graph_names[graph_i])
@@ -16,15 +19,16 @@ def useMatplotlib(graph_indexs, graph_names):
 def useGnuplot(graph_indexs, graph_names):
     for graph_i in range(len(graph_indexs)):
         g = gnuplot.Gnuplot()
-        df.iloc[:, graph_indexs[graph_i]]
-        tt = [f'using {x} with lines' for x in graph_indexs[graph_i]]
-        g.plot_data(df, *tt, title= f'"{graph_names[graph_i]}"')
+        g.cmd(f'set title "{graph_names[graph_i]}"')
+
+        cmd = 'plot '
+        for i, x in enumerate(graph_indexs[graph_i]):
+            filename = data_file if i == 0 else ""
+            cmd += f'"{filename}"using {x+1} w l, '
+        g.cmd(cmd)
     input("Press Enter to continue...")
 
 if __name__ == '__main__':
-    structure_file = "writeFileStructure.txt"
-    data_file = "~/robotics/build/33.txt"
-
     structure = defaultdict(list)
     structure_index = {}
     structure_name = {}
