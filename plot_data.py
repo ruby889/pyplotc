@@ -8,7 +8,7 @@ import sys
 
 structure_file = "writeFileStructure.txt"
 data_file = "~/robotics/build/33.txt"
-
+plot_tool = 'gnuplot'
 def useMatplotlib(graph_indexs, graph_names):
     for graph_i in range(len(graph_indexs)):
         print(graph_indexs[graph_i], graph_names[graph_i])
@@ -80,22 +80,24 @@ if __name__ == '__main__':
     graph_indexs, graph_names = [], []
     if len(sys.argv) == 1:
         keys = structure.keys()
-        graph_indexs = structure[keys]
-        graph_names = structure_name[keys]
+        graph_indexs = list(structure.values())
+        graph_names = list(structure_name.values())
     else:
         for cmd in sys.argv[1:]:
             graph_indexs.append([])
             graph_names.append("")
-            for key in cmd.split(','): 
-                key = int(key) if key.isnumeric() else structure_index[key]
+            for x in cmd.split(','): 
+                key = int(x) if x.isnumeric() else structure_index[x]
+                if (plot_tool == 'gnuplot' and x.isnumeric()): key -= 1 #Gnuplot start with 1
                 graph_indexs[-1].extend(structure[key])
                 graph_names[-1] += structure_name[key] + ", "
             graph_names[-1] = graph_names[-1][:-2] #Remove last ','
-    
-    # Plot with gnuplot
-    useGnuplot(graph_indexs, graph_names)
 
-    # # Plot with matplotlib
-    # useMatplotlib(graph_indexs, graph_names)
+    if (plot_tool == 'gnuplot'):
+        # Plot with gnuplot
+        useGnuplot(graph_indexs, graph_names)
+    elif (plot_tool == 'matplotlib'):
+        # # Plot with matplotlib
+        useMatplotlib(graph_indexs, graph_names)
     
     
