@@ -7,8 +7,9 @@ from collections import defaultdict
 import sys
 
 structure_file = "writeFileStructure.txt"
-data_file = "~/robotics/build/33.txt"
+data_file = "~/Desktop/33.txt"
 plot_tool = 'gnuplot'
+replace_map = {"Robot.JointSize": "7"}
 def useMatplotlib(graph_indexs, graph_names):
     for graph_i in range(len(graph_indexs)):
         print(graph_indexs[graph_i], graph_names[graph_i])
@@ -18,8 +19,9 @@ def useMatplotlib(graph_indexs, graph_names):
 
 def useGnuplot(graph_indexs, graph_names):
     for graph_i in range(len(graph_indexs)):
+        name = graph_names[graph_i].replace('_', '\\\_')
         g = gnuplot.Gnuplot()
-        g.cmd(f'set title "{graph_names[graph_i]}"')
+        g.cmd(f'set title "{name}"')
 
         cmd = 'plot '
         for i, x in enumerate(graph_indexs[graph_i]):
@@ -41,16 +43,21 @@ if __name__ == '__main__':
         for line in f:
             #Incomplete line
             line = prev_line + line.strip()
-            if line[-1] != ';' and line[-1] != '{' and line[-1] != ')':
+            if line and line[-1] != ';' and line[-1] != '{' and line[-1] != ')':
                 prev_line += line
                 continue
             
-            split_line = re.sub(r"[\{\}]", '', line) #remove { & }
-            split_line = re.split('\(|\)', split_line)    #split by ( & )
+            for key, val in replace_map.items():
+                line = line.replace(key, val)
+            
+
+            split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
+            split_line = re.split('\(|\)', split_line)      #split by ( & )
             if split_line[0].strip() == "fprintf":
                 context = split_line[1].split(',')
-                if len(context) < 3:    #If only string is fprintf
+                if len(context) < 3:    #If no parameters in fprintf
                     continue
+                
                 cnt = context[1].count('%')
                 names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove all characters before . or ->
                 names = [re.sub('\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
@@ -73,8 +80,9 @@ if __name__ == '__main__':
 
     '''
     Analysis sys.argv
-    e.g. plot_data.py 0,3 5  : plot two graphs, 0&3 in same graph, 5 in another graph
-    e.g. plot_data.py Target : plot graph by its name
+    e.g. python3 plot_data.py 0,3 5     : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. python3 plot_data.py joint_pos : plot joint_pos in graph
+    e.g. python3 plot_data.py           : plot all graphs
     '''
     df = pd.read_csv(data_file, sep=" ")
     graph_indexs, graph_names = [], []
@@ -88,7 +96,6 @@ if __name__ == '__main__':
             graph_names.append("")
             for x in cmd.split(','): 
                 key = int(x) if x.isnumeric() else structure_index[x]
-                if (plot_tool == 'gnuplot' and x.isnumeric()): key -= 1 #Gnuplot start with 1
                 graph_indexs[-1].extend(structure[key])
                 graph_names[-1] += structure_name[key] + ", "
             graph_names[-1] = graph_names[-1][:-2] #Remove last ','
