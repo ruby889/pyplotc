@@ -6,10 +6,8 @@ import re
 from collections import defaultdict
 import sys
 
-structure_file = "writeFileStructure_ndi.txt"
-# data_file = "~/Desktop/33.txt"
 plot_tool = 'gnuplot'
-replace_map = {"Robot.JointSize": "7"}
+replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7"}
 def useMatplotlib(graph_indexs, graph_names, df):
     for graph_i in range(len(graph_indexs)):
         print(graph_indexs[graph_i], graph_names[graph_i])
@@ -17,20 +15,7 @@ def useMatplotlib(graph_indexs, graph_names, df):
         plt.legend(graph_indexs[graph_i])
     plt.show()
 
-def useGnuplot(graph_indexs, graph_names, filename):
-    for graph_i in range(len(graph_indexs)):
-        name = graph_names[graph_i].replace('_', '\\\_')
-        g = gnuplot.Gnuplot()
-        g.cmd(f'set title "{name}"')
-
-        cmd = 'plot '
-        for i, x in enumerate(graph_indexs[graph_i]):
-            filename = data_file if i == 0 else ""
-            cmd += f'"{filename}"using {x+1} w l, '
-        g.cmd(cmd)
-    input("Press Enter to continue...")
-
-if __name__ == '__main__':
+def readStruct(structure_file):
     structure = defaultdict(list)
     structure_index = {}
     structure_name = {}
@@ -77,24 +62,42 @@ if __name__ == '__main__':
                 params = split_line[1].split(';')
                 for_loop_param = (int(params[0].strip()[-1]), int(params[1].strip()[-1]))
             prev_line = ''
+    return structure, structure_index, structure_name
 
+def useGnuplot(graph_indexs, graph_names, filename):
+    for graph_i in range(len(graph_indexs)):
+        name = graph_names[graph_i].replace('_', '\\\_')
+        g = gnuplot.Gnuplot()
+        g.cmd(f'set title "{name}"')
+
+        cmd = 'plot '
+        for i, x in enumerate(graph_indexs[graph_i]):
+            filename = data_file if i == 0 else ""
+            cmd += f'"{filename}"using {x+1} w l, '
+        g.cmd(cmd)
+    input("Press Enter to continue...")
+
+if __name__ == '__main__':
     '''
     Analysis sys.argv
-    e.g. python3 plot_data.py ~/33.txt 0,3 5     : plot two graphs, 0&3 in same graph, 5 in another graph
-    e.g. python3 plot_data.py ~/33.txt joint_pos : plot joint_pos in graph
-    e.g. python3 plot_data.py ~/33.txt          : plot all graphs
+    e.g. python3 plot_data.py [structure_file] [data_file] [plot data]    : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt 0,3 5     : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt joint_pos : plot joint_pos in graph
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt          : plot all graphs
     '''
     graph_indexs, graph_names = [], []
-    if len(sys.argv) <= 1: 
-        print("Missing data file")
+    if len(sys.argv) <= 2: 
+        print("Wrong Args")
     else:
-        data_file = sys.argv[1]
-        if len(sys.argv) == 2:
+        structure_file = sys.argv[1]
+        data_file = sys.argv[2]
+        structure, structure_index, structure_name = readStruct(structure_file)
+        if len(sys.argv) == 3:
             keys = structure.keys()
             graph_indexs = list(structure.values())
             graph_names = list(structure_name.values())
         else:
-            for cmd in sys.argv[2:]:
+            for cmd in sys.argv[3:]:
                 graph_indexs.append([])
                 graph_names.append("")
                 for x in cmd.split(','): 
