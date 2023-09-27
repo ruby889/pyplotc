@@ -66,14 +66,14 @@ def readStruct(structure_file):
 
 def useGnuplot(graph_indexs, graph_names, filename):
     for graph_i in range(len(graph_indexs)):
-        name = graph_names[graph_i].replace('_', '\\\_')
         g = gnuplot.Gnuplot()
-        g.cmd(f'set title "{name}"')
+        g.cmd(f'set title "{graph_names[graph_i]}" noenhanced')
 
         cmd = 'plot '
+        names = graph_names[graph_i].split(',')
         for i, x in enumerate(graph_indexs[graph_i]):
             filename = data_file if i == 0 else ""
-            cmd += f'"{filename}"using {x+1} w l, '
+            cmd += f"'{filename}'using {x+1} w l title '{x+1}: {names[i].strip()}' noenhanced, "
         g.cmd(cmd)
     input("Press Enter to continue...")
 
