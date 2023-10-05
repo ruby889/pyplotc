@@ -8,10 +8,10 @@ import sys
 
 plot_tool = 'gnuplot'
 replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7"}
-def useMatplotlib(graph_indexs, graph_names, df):
+def useMatplotlib(graph_indexs, graph_names, graph_titles, df):
     for graph_i in range(len(graph_indexs)):
-        print(graph_indexs[graph_i], graph_names[graph_i])
-        df.iloc[:, graph_indexs[graph_i]].plot(title=graph_names[graph_i])
+        print(graph_indexs[graph_i], graph_titles[graph_i])
+        df.iloc[:, graph_indexs[graph_i]].plot(title=graph_titles[graph_i])
         plt.legend(graph_indexs[graph_i])
     plt.show()
 
@@ -64,10 +64,10 @@ def readStruct(structure_file):
             prev_line = ''
     return structure, structure_index, structure_name
 
-def useGnuplot(graph_indexs, graph_names, filename):
+def useGnuplot(graph_indexs, graph_names, graph_titles, filename):
     for graph_i in range(len(graph_indexs)):
         g = gnuplot.Gnuplot()
-        g.cmd(f'set title "{graph_names[graph_i]}" noenhanced')
+        g.cmd(f'set title "{graph_titles[graph_i]}" noenhanced')
 
         cmd = 'plot '
         names = graph_names[graph_i].split(',')
@@ -85,33 +85,41 @@ if __name__ == '__main__':
     e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt joint_pos : plot joint_pos in graph
     e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt          : plot all graphs
     '''
-    graph_indexs, graph_names = [], []
     if len(sys.argv) <= 2: 
         print("Wrong Args")
     else:
         structure_file = sys.argv[1]
         data_file = sys.argv[2]
         structure, structure_index, structure_name = readStruct(structure_file)
+        graph_indexs, graph_names, graph_titles, graphs = [], [], [], []
         if len(sys.argv) == 3:
-            keys = structure.keys()
-            graph_indexs = list(structure.values())
-            graph_names = list(structure_name.values())
+            graphs = [[graph] for graph in structure.keys()]
         else:
             for cmd in sys.argv[3:]:
-                graph_indexs.append([])
-                graph_names.append("")
+                temp = []
                 for x in cmd.split(','): 
                     key = int(x) if x.isnumeric() else structure_index[x]
-                    graph_indexs[-1].extend(structure[key])
-                    graph_names[-1] += structure_name[key] + ", "
-                graph_names[-1] = graph_names[-1][:-2] #Remove last ','
+                    temp.append(key)
+                graphs.append(temp)
 
+        for graph in graphs:
+            graph_indexs.append([])
+            graph_names.append("")
+            graph_titles.append("")
+            for line in graph:
+                graph_indexs[-1].extend(structure[line])
+                name = structure_name[line] + ", "
+                graph_names[-1] += name * len(structure[line])
+                graph_titles[-1] += name
+            graph_titles[-1] = graph_titles[-1][:-2]
+
+        df = pd.read_csv(data_file, sep=" ")
+        print("data_file shape: ", df.shape)
         if (plot_tool == 'gnuplot'):
             # Plot with gnuplot
-            df = pd.read_csv(data_file, sep=" ")
-            useGnuplot(graph_indexs, graph_names, df)
+            useGnuplot(graph_indexs, graph_names, graph_titles, df)
         elif (plot_tool == 'matplotlib'):
             # # Plot with matplotlib
-            useMatplotlib(graph_indexs, graph_names, data_file)
+            useMatplotlib(graph_indexs, graph_names, graph_titles, data_file)
     
     
