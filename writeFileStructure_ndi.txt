@@ -1,0 +1,15 @@
+fprintf(fwrite_data,"%ld %ld ", save_item.robot_receive_cost, save_item.ndi_receive_cost);
+fprintf(fwrite_data,"%ld %ld ", save_item.robot_total_cost, save_item.ndi_total_cost);
+fprintf(fwrite_data,"%ld %ld ", save_item.robot_sleep_cost, save_item.robot_planned_sleep_cost);
+fprintf(fwrite_data,"%d ", save_item.ndi_tool_state);
+
+for (int i=0; i<7; ++i){
+    fprintf(fwrite_data,"%lf ", save_item.ndi_measurement_pose[i]);
+}
+for (int i=0; i<7; ++i){
+    fprintf(fwrite_data,"%lf ", save_item.joint_pos[i]);
+}
+for (int i=0; i<7; ++i){
+    fprintf(fwrite_data,"%lf ", save_item.robot_pose[i]);
+}
+fprintf(fwrite_data, "\n");
