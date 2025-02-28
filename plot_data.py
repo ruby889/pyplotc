@@ -7,14 +7,8 @@ from collections import defaultdict
 import sys
 
 plot_tool = 'gnuplot'
-replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7"}
-def useMatplotlib(graph_indexs, graph_names, graph_titles, df):
-    for graph_i in range(len(graph_indexs)):
-        print(graph_indexs[graph_i], graph_titles[graph_i])
-        df.iloc[:, graph_indexs[graph_i]].plot(title=graph_titles[graph_i])
-        plt.legend(graph_indexs[graph_i])
-    plt.show()
-
+# plot_tool = 'matplotlib'
+replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2"}
 def readStruct(structure_file):
     structure = defaultdict(list)
     structure_index = {}
@@ -34,8 +28,7 @@ def readStruct(structure_file):
             
             for key, val in replace_map.items():
                 line = line.replace(key, val)
-            
-
+                
             split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
             split_line = re.split('\(|\)', split_line)      #split by ( & )
             if split_line[0].strip() == "fprintf":
@@ -44,7 +37,7 @@ def readStruct(structure_file):
                     continue
                 
                 cnt = context[1].count('%')
-                names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove all characters before . or ->
+                names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
                 names = [re.sub('\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
                 #Save names
                 for i in range(cnt):
@@ -64,9 +57,26 @@ def readStruct(structure_file):
             prev_line = ''
     return structure, structure_index, structure_name
 
-def useGnuplot(graph_indexs, graph_names, graph_titles, filename):
+def plotWithMatplotlib(graph_indexs, graph_names, graph_titles, graph_options, df):
+    start, end = 0, df.shape[0]
+    if "xrange" in graph_options:
+        start,end = graph_options["xrange"]
+
+    for graph_i in range(len(graph_indexs)):
+        df.iloc[start:end, graph_indexs[graph_i]].plot(title=graph_titles[graph_i])
+        plt.legend(graph_indexs[graph_i])
+    plt.show()
+
+def plotWithGnuplot(graph_indexs, graph_names, graph_titles, graph_options, filename):
+    start, end = 0, df.shape[0]
+    if "xrange" in graph_options:
+        start,end = graph_options["xrange"]
+        
     for graph_i in range(len(graph_indexs)):
         g = gnuplot.Gnuplot()
+        if "xrange" in graph_options:
+            start,end = graph_options["xrange"]
+            g.cmd(f'set xrange [{start}:{end}]')
         g.cmd(f'set title "{graph_titles[graph_i]}" noenhanced')
 
         cmd = 'plot '
@@ -80,22 +90,44 @@ def useGnuplot(graph_indexs, graph_names, graph_titles, filename):
 if __name__ == '__main__':
     '''
     Analysis sys.argv
-    e.g. python3 plot_data.py [structure_file] [data_file] [plot data]    : plot two graphs, 0&3 in same graph, 5 in another graph
-    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt 0,3 5     : plot two graphs, 0&3 in same graph, 5 in another graph
-    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt joint_pos : plot joint_pos in graph
-    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt          : plot all graphs
+    e.g. python3 plot_data.py [structure_file] [data_file] [{options}] [plot data]               : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt 0,3 5                            : plot two graphs, 0&3 in same graph, 5 in another graph
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt joint_pos                        : plot joint_pos
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt                                  : plot all graphs
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt {"set xrange": [200:]} joint_pos : plot joint_pos with xrange set to [200:] 
     '''
     if len(sys.argv) <= 2: 
         print("Wrong Args")
     else:
+        #Handle data struct
         structure_file = sys.argv[1]
-        data_file = sys.argv[2]
         structure, structure_index, structure_name = readStruct(structure_file)
+
+        #Handle data
+        data_file = sys.argv[2]
+        df = pd.read_csv(data_file, sep=" ", low_memory=False)
+
+        #Handle options
+        graph_options = {}
+        next_pos = 3
+        if len(sys.argv) > 3 and sys.argv[3][0] == '{':
+            next_pos += 1
+            options = sys.argv[3][1:-1].split(',')
+            for opt in options:
+                key, val = opt.split(':', 1)
+                if key == "xrange":
+                    pattern = re.compile(r'\[(\d+):(\d*)\]')
+                    match = pattern.match(val)
+                    start = int(match.group(1)) if match.group(1) else 0
+                    end = int(match.group(2)) if match.group(2) else df.shape[0]
+                    graph_options[key] = (start, end)
+
+        #Handle plot info
         graph_indexs, graph_names, graph_titles, graphs = [], [], [], []
-        if len(sys.argv) == 3:
+        if len(sys.argv) == next_pos: #Plot all data
             graphs = [[graph] for graph in structure.keys()]
-        else:
-            for cmd in sys.argv[3:]:
+        else: #Plot data specified by user
+            for cmd in sys.argv[next_pos:]:
                 temp = []
                 for x in cmd.split(','): 
                     key = int(x) if x.isnumeric() else structure_index[x]
@@ -113,13 +145,9 @@ if __name__ == '__main__':
                 graph_titles[-1] += name
             graph_titles[-1] = graph_titles[-1][:-2]
 
-        df = pd.read_csv(data_file, sep=" ")
-        print("data_file shape: ", df.shape)
         if (plot_tool == 'gnuplot'):
-            # Plot with gnuplot
-            useGnuplot(graph_indexs, graph_names, graph_titles, df)
+            plotWithGnuplot(graph_indexs, graph_names, graph_titles, graph_options, data_file)
         elif (plot_tool == 'matplotlib'):
-            # # Plot with matplotlib
-            useMatplotlib(graph_indexs, graph_names, graph_titles, data_file)
+            plotWithMatplotlib(graph_indexs, graph_names, graph_titles, graph_options, df)
     
     
