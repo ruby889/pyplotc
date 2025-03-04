@@ -8,7 +8,7 @@ import sys
 
 plot_tool = 'gnuplot'
 # plot_tool = 'matplotlib'
-replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2"}
+replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2", "gripper_size":"1"}
 def readStruct(structure_file):
     structure = defaultdict(list)
     structure_index = {}
@@ -19,42 +19,48 @@ def readStruct(structure_file):
     with open(structure_file, "r") as f:
         for_loop_param = (0,1)
         prev_line = ''
-        for line in f:
-            #Incomplete line
-            line = prev_line + line.strip()
-            if line and line[-1] != ';' and line[-1] != '{' and line[-1] != ')':
-                prev_line += line
-                continue
-            
-            for key, val in replace_map.items():
-                line = line.replace(key, val)
-                
-            split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
-            split_line = re.split('\(|\)', split_line)      #split by ( & )
-            if split_line[0].strip() == "fprintf":
-                context = split_line[1].split(',')
-                if len(context) < 3:    #If no parameters in fprintf
+        for line0 in f:
+            try:
+                #Incomplete line
+                line = prev_line + line0.strip()
+                if line and line[-1] != ';' and line[-1] != '{' and line[-1] != ')':
+                    prev_line += line
                     continue
                 
-                cnt = context[1].count('%')
-                names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
-                names = [re.sub('\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
-                #Save names
-                for i in range(cnt):
-                    structure_name[i+cur_i] = names[i]
-                    structure_index[names[i]] = i+cur_i
+                for key, val in replace_map.items():
+                    line = line.replace(key, val)
+                    
+                split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
+                split_line = re.split('\(|\)', split_line)      #split by ( & )
+                if split_line[0].strip() == "fprintf":
+                    context = split_line[1].split(',')
+                    if len(context) < 3:    #If no parameters in fprintf
+                        continue
+                    
+                    cnt = context[1].count('%')
+                    names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
+                    names = [re.sub('\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
+                    #Save names
+                    for i in range(cnt):
+                        structure_name[i+cur_i] = names[i]
+                        structure_index[names[i]] = i+cur_i
 
-                #Save data index
-                for i in range(*for_loop_param):
-                    for j in range(cur_i, cnt+cur_i):
-                        structure[j].append(len(index))
-                        index.append(j)
-                cur_i += cnt*(for_loop_param[1]-for_loop_param[0])
-                for_loop_param = (0,1)
-            elif split_line[0].strip() == "for":
-                params = split_line[1].split(';')
-                for_loop_param = (int(params[0].strip()[-1]), int(params[1].strip()[-1]))
-            prev_line = ''
+                    #Save data index
+                    for i in range(*for_loop_param):
+                        for j in range(cur_i, cnt+cur_i):
+                            structure[j].append(len(index))
+                            index.append(j)
+                    cur_i += cnt*(for_loop_param[1]-for_loop_param[0])
+                    for_loop_param = (0,1)
+                elif split_line[0].strip() == "for":
+                    params = split_line[1].split(';')
+                    for_loop_param = (int(params[0].strip()[-1]), int(params[1].strip()[-1]))
+                prev_line = ''
+            except:
+                print("line0: ", line0) 
+                print("line: ", line)
+                print("split_line: ", split_line)
+                raise Exception("Error orccurs")
     return structure, structure_index, structure_name
 
 def plotWithMatplotlib(graph_indexs, graph_names, graph_titles, graph_options, df):
