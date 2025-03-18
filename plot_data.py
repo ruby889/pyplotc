@@ -31,15 +31,15 @@ def readStruct(structure_file):
                     line = line.replace(key, val)
                     
                 split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
-                split_line = re.split('\(|\)', split_line)      #split by ( & )
+                split_line = re.split(r'\(|\)', split_line)      #split by ( & )
                 if split_line[0].strip() == "fprintf":
                     context = split_line[1].split(',')
                     if len(context) < 3:    #If no parameters in fprintf
                         continue
                     
                     cnt = context[1].count('%')
-                    names = [re.sub('^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
-                    names = [re.sub('\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
+                    names = [re.sub(r'^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
+                    names = [re.sub(r'\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
                     #Save names
                     for i in range(cnt):
                         structure_name[i+cur_i] = names[i]
