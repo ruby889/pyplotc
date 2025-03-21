@@ -122,7 +122,7 @@ if __name__ == '__main__':
             for opt in options:
                 key, val = opt.split(':', 1)
                 if key == "xrange":
-                    pattern = re.compile(r'\[(\d+):(\d*)\]')
+                    pattern = re.compile(r'\[(\d*):(\d*)\]')
                     match = pattern.match(val)
                     start = int(match.group(1)) if match.group(1) else 0
                     end = int(match.group(2)) if match.group(2) else df.shape[0]
