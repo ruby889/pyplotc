@@ -5,63 +5,142 @@ from pygnuplot import gnuplot
 import re
 from collections import defaultdict
 import sys
+from enum import Enum
 
 plot_tool = 'gnuplot'
 # plot_tool = 'matplotlib'
-replace_map = {"Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2", "gripper_size":"1"}
+replacement_map = {"DriverSize":"7", "ArmSize":"2", "Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2", "gripper_size":"1"}
+
+
+def process_for_loop(lines, row_index, col_index):
+    structure = defaultdict(list)
+    sub_cnt, sub_structure = 0, {}
+    cnt = 0
+
+    cmd = lines[row_index]
+    pattern = r"for\s*\(\s*(?:[\w<>]+)?\s*(\w+)\s*=\s*([^;]+);\s*(.*?)\s*;\s*(.*?)\s*\)"
+    match = re.search(pattern, lines[row_index])
+    if match:    
+        loop_var = match.group(1)  # Captures loop variable
+        start_index = match.group(2).strip()  # Captures initialization value
+        end_condition = match.group(3).strip()  # Captures loop condition
+        increment = match.group(4).strip()  # Captures increment operation
+
+        pattern1 = r"\s*\w+\s*(<|<=)\s*(\w+\.*\w*)"
+        match1 = re.search(pattern1, end_condition)
+        operator = match1.group(1) 
+        end_index_str = match1.group(2)
+        end_index_str = re.sub(r'^.*(\.|->)', '', end_index_str) #remove string before . or ->
+        for key, val in replacement_map.items():
+            end_index_str = end_index_str.replace(key, val)
+
+        start_index = int(start_index)
+        end_index = int(end_index_str)
+        end_index += 0 if (operator == '<') else 1
+        increment_val = -1 if ('--' in increment) else 1
+        # print("Start Index:", start_index)
+        # print("End Index:", end_index)
+        # print("increment_val", increment_val)
+    else:
+        raise Exception(f"Cannot breakdown for statement: {lines[row_index]}")
+    row_index += 1
+
+    while row_index < len(lines):
+        line = lines[row_index].strip()
+        if line[:3] == "for":
+            row_index, temp_cnt, temp_structure = process_for_loop(lines, row_index, sub_cnt)
+            sub_structure.update(temp_structure)
+            sub_cnt += temp_cnt
+            continue
+        elif line[:7] == "fprintf":
+            row_index, temp_cnt, temp_structure = process_fprintf(lines, row_index, sub_cnt)
+            sub_structure.update(temp_structure)
+            sub_cnt += temp_cnt
+            continue
+        else:
+            #Continue read line if it not yet finished
+            if not line or line[-1] != '}':
+                cmd += lines[row_index]
+                row_index += 1
+                continue
+            for i in range(start_index, end_index, increment_val):
+                for key, arr in sub_structure.items():
+                    structure[key].extend([col_index + i*sub_cnt + x for x in arr])
+
+            cnt = (end_index-start_index)*sub_cnt
+            braket_i = line.find('}')
+            if (braket_i != len(line) - 1):
+                lines[row_index] = line[braket_i:]
+                return row_index, cnt, structure
+            return row_index + 1, cnt, structure
+
+
+def process_fprintf(lines, row_index, col_index):
+    cmd = ""
+    structure = defaultdict(list)
+    while row_index < len(lines):
+        line = lines[row_index].strip()
+        cmd += line
+        #Continue read line if it not yet finished
+        if (not ';' in line):
+            row_index += 1
+            continue
+        else:
+            split_lines = re.split(r',(?![^<]*>)', cmd)
+            format_cnt = 2
+            if len(split_lines) > 2:                #If we have parameters in fprintf
+                format_str = split_lines[1]
+                format_cnt = format_str.count('%')
+                names = split_lines[2:]
+                names = [re.sub(r'^.*(\.|->)', '', x) for x in split_lines[2:]] #remove string before . or ->
+                names = [re.sub(r'\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
+                names = [x.strip(");}") for x in names] #Remove trailing '}' and ';' and ')'
+                names = [x.strip() for x in names] #Remove leading and trailing spaces
+                if format_cnt != len(names):
+                    raise Exception("format_cnt != len(names) from cmd: ", cmd)
+                for i, name in enumerate(names):
+                    structure[name].append(col_index + i)
+
+            semicolon_i = line.find(';')
+            if (semicolon_i != len(line) - 1):
+                lines[row_index] = line[semicolon_i:]
+                return row_index, format_cnt, structure
+            return row_index+1, format_cnt, structure
+    raise Exception("process_fprintf met invalid cmd: ", cmd)
+
 def readStruct(structure_file):
     structure = defaultdict(list)
-    structure_index = {}
-    structure_name = {}
-    index = []
-    cur_i = 0
+    structure_names = []
+    current_col_index = 0
+
     #Analysis c++/c fprintf function
     with open(structure_file, "r") as f:
-        for_loop_param = (0,1)
-        prev_line = ''
-        for line0 in f:
-            try:
-                #Incomplete line
-                line = prev_line + line0.strip()
-                if line and line[-1] != ';' and line[-1] != '{' and line[-1] != ')':
-                    prev_line += line
-                    continue
-                
-                for key, val in replace_map.items():
-                    line = line.replace(key, val)
-                    
-                split_line = re.sub(r"[\{\}]", '', line)        #remove { & }
-                split_line = re.split(r'\(|\)', split_line)      #split by ( & )
-                if split_line[0].strip() == "fprintf":
-                    context = split_line[1].split(',')
-                    if len(context) < 3:    #If no parameters in fprintf
-                        continue
-                    
-                    cnt = context[1].count('%')
-                    names = [re.sub(r'^.*(\.|->)', '', x) for x in context[2:]] #remove string before . or ->
-                    names = [re.sub(r'\[.*', '', x) for x in names]  #remove all [*]. e.g. torque[i] -> torque
-                    #Save names
-                    for i in range(cnt):
-                        structure_name[i+cur_i] = names[i]
-                        structure_index[names[i]] = i+cur_i
-
-                    #Save data index
-                    for i in range(*for_loop_param):
-                        for j in range(cur_i, cnt+cur_i):
-                            structure[j].append(len(index))
-                            index.append(j)
-                    cur_i += cnt*(for_loop_param[1]-for_loop_param[0])
-                    for_loop_param = (0,1)
-                elif split_line[0].strip() == "for":
-                    params = split_line[1].split(';')
-                    for_loop_param = (int(params[0].strip()[-1]), int(params[1].strip()[-1]))
-                prev_line = ''
-            except:
-                print("line0: ", line0) 
-                print("line: ", line)
-                print("split_line: ", split_line)
-                raise Exception("Error orccurs")
-    return structure, structure_index, structure_name
+        lines = f.readlines()
+    row_index = 0
+    try:
+        while row_index < len(lines):
+            line = lines[row_index].strip() #Remove spaces
+            if not line: 
+                row_index += 1
+                continue
+            if line[:7] == "fprintf":
+                row_index, cnt, temp_structure = process_fprintf(lines, row_index, current_col_index)
+            elif line[:3] == "for":
+                row_index, cnt, temp_structure = process_for_loop(lines, row_index, current_col_index)
+            else:
+                raise Exception("Unknown starting string") 
+            for key, val in temp_structure.items():
+                structure[key].extend(val)
+            current_col_index += cnt
+    except Exception as e:
+        print(f"row_index: {row_index}, line: {line}")
+        raise e
+    
+    structure_names = [0]*current_col_index
+    for key, val in structure.items():
+        for x in val:
+            structure_names[x] = key
+    return structure, structure_names
 
 def plotWithMatplotlib(graph_indexs, graph_names, graph_titles, graph_options, df):
     start, end = 0, df.shape[0]
@@ -77,7 +156,7 @@ def plotWithGnuplot(graph_indexs, graph_names, graph_titles, graph_options, file
     start, end = 0, df.shape[0]
     if "xrange" in graph_options:
         start,end = graph_options["xrange"]
-        
+
     for graph_i in range(len(graph_indexs)):
         g = gnuplot.Gnuplot()
         if "xrange" in graph_options:
@@ -89,7 +168,7 @@ def plotWithGnuplot(graph_indexs, graph_names, graph_titles, graph_options, file
         names = graph_names[graph_i].split(',')
         for i, x in enumerate(graph_indexs[graph_i]):
             filename = data_file if i == 0 else ""
-            cmd += f"'{filename}'using {x+1} w l title '{x+1}: {names[i].strip()}' noenhanced, "
+            cmd += f"'{filename}' using {x+1} w l title '{x+1}: {names[i].strip()}' noenhanced, "
         g.cmd(cmd)
     input("Press Enter to continue...")
 
@@ -100,14 +179,14 @@ if __name__ == '__main__':
     e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt 0,3 5                            : plot two graphs, 0&3 in same graph, 5 in another graph
     e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt joint_pos                        : plot joint_pos
     e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt                                  : plot all graphs
-    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt {"set xrange": [200:]} joint_pos : plot joint_pos with xrange set to [200:] 
+    e.g. python3 plot_data.py ./writeFileStructure.txt ~/33.txt {"xrange":[200:]} joint_pos : plot joint_pos with xrange set to [200:] 
     '''
     if len(sys.argv) <= 2: 
         print("Wrong Args")
     else:
         #Handle data struct
         structure_file = sys.argv[1]
-        structure, structure_index, structure_name = readStruct(structure_file)
+        structure, structure_names = readStruct(structure_file)
 
         #Handle data
         data_file = sys.argv[2]
@@ -136,20 +215,22 @@ if __name__ == '__main__':
             for cmd in sys.argv[next_pos:]:
                 temp = []
                 for x in cmd.split(','): 
-                    key = int(x) if x.isnumeric() else structure_index[x]
+                    key = x if not x.isnumeric() else structure_names[int(x)]
                     temp.append(key)
                 graphs.append(temp)
-
+                
         for graph in graphs:
             graph_indexs.append([])
             graph_names.append("")
             graph_titles.append("")
-            for line in graph:
-                graph_indexs[-1].extend(structure[line])
-                name = structure_name[line] + ", "
-                graph_names[-1] += name * len(structure[line])
+            for name in graph:
+                graph_indexs[-1].extend(structure[name])
+                if (len(structure[name]) > 1):
+                    graph_names[-1] += "".join([f"{name}_{i}, " for i in range(len(structure[name]))])
+                else:
+                    graph_names[-1] += f"{name}, "
                 graph_titles[-1] += name
-            graph_titles[-1] = graph_titles[-1][:-2]
+            graph_titles[-1] = graph_titles[-1]
 
         if (plot_tool == 'gnuplot'):
             plotWithGnuplot(graph_indexs, graph_names, graph_titles, graph_options, data_file)
