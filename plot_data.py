@@ -9,8 +9,16 @@ from enum import Enum
 
 plot_tool = 'gnuplot'
 # plot_tool = 'matplotlib'
-replacement_map = {"DriverSize":"7", "ArmSize":"2", "Robot.JointSize": "7", "rs.JointSize": "7", "ms.JointSize": "7", "Driver.DriverSize[arm_i]": "7", "camera_size": "2", "gripper_size":"1"}
-
+replacement_map = {"arm_size_"                  :"2", 
+                   "joint_size_"                :"7", 
+                   "DriverSize"                 :"7", 
+                   "ArmSize"                    :"2", 
+                   "Robot.JointSize"            :"7", 
+                   "rs.JointSize"               :"7", 
+                   "ms.JointSize"               :"7", 
+                   "Driver.DriverSize[arm_i]"   :"7", 
+                   "camera_size"                :"0",
+                   "gripper_size"               :"2"}
 
 def process_for_loop(lines, row_index, col_index):
     structure = defaultdict(list)
@@ -229,7 +237,7 @@ if __name__ == '__main__':
                     graph_names[-1] += "".join([f"{name}_{i}, " for i in range(len(structure[name]))])
                 else:
                     graph_names[-1] += f"{name}, "
-                graph_titles[-1] += name
+                graph_titles[-1] += name if not graph_titles[-1] else ', ' + name
             graph_titles[-1] = graph_titles[-1]
 
         if (plot_tool == 'gnuplot'):
