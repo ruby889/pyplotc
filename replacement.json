@@ -1,0 +1,5 @@
+{
+    "NUM_JOINTS": 14,
+    "NUM_ARM": 2,
+    "JOINTS_PER_ARM": 7
+}

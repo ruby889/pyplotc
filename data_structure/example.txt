@@ -1,0 +1,48 @@
+for (int i = 0; i < NUM_ARM; i++)
+{
+    for (int j = 0; j < JOINTS_PER_ARM; i++)
+    {
+        fprintf(fwrite_data, "%f ", set_velocity[i][j]);
+    }
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", read_position[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", read_velocity[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", position_error[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", kp_velocity[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", max_velocity_bound[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", max_acceleration_bound[i]);
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    fprintf(fwrite_data, "%f ", curobo_command_ptr->JointPosCmd[i]);
+}
+
+fprintf(fwrite_data, "%d ", status);
+fprintf(fwrite_data, "%f ", t1);
+fprintf(fwrite_data, "%f ", t2);
+fprintf(fwrite_data, "%d %d ", receiver_communication_time, receiver_running_time);
+fprintf(fwrite_data, "\n");
