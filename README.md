@@ -53,7 +53,7 @@ When specifying targets using `--target`, **pyplotc** automatically
     This means you can simply use:
 
     ```
-    --target=JointPosCmd[i]  
+    --target=JointPosCmd
     ```
 * maps column indices or variable names to their corresponding array expressions in the structure file. 
 

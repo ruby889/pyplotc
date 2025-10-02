@@ -96,9 +96,12 @@ class CCodeVisitor(c_ast.NodeVisitor):
         if isinstance(node, c_ast.ID):
             return node.name
         elif isinstance(node, c_ast.ArrayRef):
-            # For array references like set_velocity[i], get the base name
+            # For array references like set_velocity[i] or ptr->field[i], get the base name
             if isinstance(node.name, c_ast.ID):
                 return node.name.name
+            elif isinstance(node.name, c_ast.StructRef):
+                # Handle cases like ptr->field[i] - extract the field name
+                return self.extract_variable_name(node.name)
             elif hasattr(node.name, 'name'):
                 return node.name.name
             else:
