@@ -13,7 +13,7 @@
 Install the required dependencies:
 
 ```sh
-pip install py-gnuplot==1.3 matplotlib pandas
+pip install py-gnuplot==1.3 matplotlib pandas pycparser
 ```
 
 ## Usage
