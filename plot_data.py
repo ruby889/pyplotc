@@ -197,7 +197,6 @@ def parse_array_target(target_str, structure_by_name, structure_by_index, replac
     
     # Handle array indexing like set_velocity[2] or set_velocity[1][3]
     if '[' in target_str and ']' in target_str:
-        import re
         # Extract variable name and indices
         match = re.match(r'(\w+)((?:\[\d+\])+)', target_str)
         if match:
@@ -325,7 +324,6 @@ def read_struct(structure_file, replacement_map):
                     name = name[9:-2]  # Remove "ID(name='" and "')"
                 elif "ID(name=" in name:
                     # Handle multiline AST representations
-                    import re
                     match = re.search(r"ID\(name='([^']+)'", name)
                     if match:
                         name = match.group(1)

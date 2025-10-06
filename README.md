@@ -23,10 +23,7 @@ pip install py-gnuplot==1.3 matplotlib pandas pycparser
 Plot two graphs: columns 3 & 17 in the first graph, and `position_error` in the second graph:
 
 ```sh
-python plot_data.py 
-    --structure_file=data_structure/example.txt 
-    --data_file=data/example.txt 
-    --target=3,17:position_error
+python plot_data.py --structure_file=data_structure/example.txt --data_file=data/example.txt --target=3,17:position_error
 ```
 
 ### Arguments
