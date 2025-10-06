@@ -23,9 +23,9 @@ pip install py-gnuplot==1.3 matplotlib pandas pycparser
 Plot two graphs: columns 3 & 17 in the first graph, and `position_error` in the second graph:
 
 ```sh
-python plot_data.py \
-    --structure_file=data_structure/example.txt \
-    --data_file=data/example.txt \
+python plot_data.py 
+    --structure_file=data_structure/example.txt 
+    --data_file=data/example.txt 
     --target=3,17:position_error
 ```
 
@@ -46,9 +46,9 @@ When specifying targets using `--target`, **pyplotc** automatically
     ##### Examples
 
     | Structure File Expression                | Parsed Target Argument |
-    |------------------------------------------|-------------------------|
-    | `curobo_command_ptr->JointPosCmd[i]`     | `JointPosCmd[i]`        |
-    | `curobo_command_ptr.JointPosCmd[i]`      | `JointPosCmd[i]`        |
+    |------------------------------------------|------------------------|
+    | `curobo_command_ptr->JointPosCmd[i]`     | `JointPosCmd`          |
+    | `curobo_command_ptr.JointPosCmd[i]`      | `JointPosCmd`          |
 
     This means you can simply use:
 
