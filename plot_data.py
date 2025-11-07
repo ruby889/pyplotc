@@ -18,8 +18,6 @@ class CCodeVisitor(c_ast.NodeVisitor):
     def __init__(self, replacement_map):
         self.replacement_map = replacement_map
         self.fprintf_calls = []
-        self.for_loops = []
-        self.for_loop_stack = []  # Stack to track nested loops
         
     def visit_FuncCall(self, node):
         """Visit function calls to find fprintf statements."""
@@ -30,10 +28,10 @@ class CCodeVisitor(c_ast.NodeVisitor):
     def visit_For(self, node):
         """Visit for loops to extract loop parameters."""
         for_info = self.extract_for_info(node)
-        self.for_loop_stack.append(for_info)
-        self.for_loops.append(for_info)
+        parent_fprintf_calls = self.fprintf_calls.copy()
+        self.fprintf_calls = []
         self.generic_visit(node)
-        self.for_loop_stack.pop()
+        self.fprintf_calls = parent_fprintf_calls + [{"for_context": self.fprintf_calls, "for_info":for_info}]
         
     def extract_fprintf_info(self, node):
         """Extract information from fprintf function calls."""
@@ -59,7 +57,6 @@ class CCodeVisitor(c_ast.NodeVisitor):
         fprintf_info = {
             'param_count': param_count,
             'param_names': param_names,
-            'for_context': list(self.for_loop_stack)  # Copy current nested loop context
         }
         self.fprintf_calls.append(fprintf_info)
         
@@ -99,6 +96,9 @@ class CCodeVisitor(c_ast.NodeVisitor):
             # For array references like set_velocity[i] or ptr->field[i], get the base name
             if isinstance(node.name, c_ast.ID):
                 return node.name.name
+            elif isinstance(node.name, c_ast.ArrayRef):
+                # Handle cases like ptr->field[i][j]
+                return self.extract_variable_name(node.name)
             elif isinstance(node.name, c_ast.StructRef):
                 # Handle cases like ptr->field[i] - extract the field name
                 return self.extract_variable_name(node.name)
@@ -150,7 +150,7 @@ def parse_c_code_with_pycparser(code_content, replacement_map):
         visitor = CCodeVisitor(replacement_map)
         visitor.visit(ast)
         
-        return visitor.fprintf_calls, visitor.for_loops
+        return visitor.fprintf_calls
         
     except Exception as e:
         print(f"Error parsing C code with pycparser: {e}")
@@ -286,32 +286,21 @@ def read_replacement_map(replacement_file):
             replacement_map[key] = str(val)
     return replacement_map
 
-def read_struct(structure_file, replacement_map):
-    structure_by_name = {}
-    structure_by_index = {}
-    cur_i = 0
+def extract_fprintf_calls(fprintf_calls):
+    ordered_params = []
     
-    # Read the entire C code file
-    with open(structure_file, "r") as f:
-        code_content = f.read()
-    
-    # Try to parse with pycparser first
-    fprintf_calls, for_loops = parse_c_code_with_pycparser(code_content, replacement_map)
-    
-    if fprintf_calls:
-        # Use pycparser results
-        for fprintf_info in fprintf_calls:
+    for fprintf_info in fprintf_calls:
+        if "for_context" in fprintf_info:
+            nested_ordered_params = extract_fprintf_calls(fprintf_info["for_context"])
+            start, end = fprintf_info["for_info"]['start'], fprintf_info["for_info"]['end']
+            loop_ordered_params = []
+            for _ in range(start, end+1):
+                loop_ordered_params += nested_ordered_params
+            ordered_params.extend(loop_ordered_params)
+        else:
             param_count = fprintf_info['param_count']
             param_names = fprintf_info['param_names']
-            for_context = fprintf_info['for_context']
             
-            # Calculate total iterations for nested loops
-            total_iterations = 1
-            if for_context:
-                for loop_info in for_context:
-                    loop_size = loop_info['end'] - loop_info['start'] + 1
-                    total_iterations *= loop_size
-                
             # Clean parameter names
             cleaned_names = []
             for name in param_names:
@@ -336,18 +325,26 @@ def read_struct(structure_file, replacement_map):
                 name = name.strip('();{}\n ')
                 cleaned_names.append(name)
             
-            # Initialize structure for names
-            for name in cleaned_names[:param_count]:
-                if name not in structure_by_name:
-                    structure_by_name[name] = []
-            
-            # Add data indices for nested loops
-            for i in range(total_iterations):
-                for j, name in enumerate(cleaned_names[:param_count]):
-                    structure_by_index[cur_i] = name
-                    structure_by_name[name].append(cur_i)
-                    cur_i += 1
-    return structure_by_name, structure_by_index
+            for j, name in enumerate(cleaned_names[:param_count]):
+                ordered_params.append(name)
+    return ordered_params
+        
+
+def read_struct(structure_file, replacement_map):
+    structure_by_name = {}
+    
+    # Read the entire C code file
+    with open(structure_file, "r") as f:
+        code_content = f.read()
+    
+    # Try to parse with pycparser first
+    fprintf_calls = parse_c_code_with_pycparser(code_content, replacement_map)
+    ordered_param_indexes = extract_fprintf_calls(fprintf_calls)
+    for i, name in enumerate(ordered_param_indexes):
+        if name not in structure_by_name:
+            structure_by_name[name] = []
+        structure_by_name[name].append(i)
+    return structure_by_name, ordered_param_indexes
 
 def plot_with_matplotlib(figure_indexs, figure_names, figure_titles, frame_indexs, df):
     start, end = frame_indexs
@@ -420,17 +417,20 @@ if __name__ == '__main__':
     #Add replacement map
     replacement_map = read_replacement_map(args["replacement_file"])
 
-    #Handle data struct
     structure_file_path = args["structure_file"]
-    structure_by_name, structure_by_index = read_struct(args["structure_file"], replacement_map)
+    data_file_path = args["data_file"]
     print(f"Structure file: {structure_file_path}")
+    print(f"Data file: {data_file_path}")
     if args["column_mode"]:
         print("Column mode enabled: Numbers in target refer to direct column indices")
     
+    #Handle data struct
+    structure_by_name, structure_params_array = read_struct(args["structure_file"], replacement_map)
+    print(f"\nstructure_params_array: {structure_params_array}\n")
+    print(f"structure_by_name: {structure_by_name}\n")
+    
     #Handle data
-    data_file_path = args["data_file"]
     df = pd.read_csv(data_file_path, sep=" ", low_memory=False)
-    print(f"Data file: {data_file_path}")
 
     #Handle options
     start_frame = args["start_frame"]
@@ -449,12 +449,12 @@ if __name__ == '__main__':
             for target in targets.split(','): 
                 target = target.strip()
                 # Parse target (may include array indexing)
-                indices = parse_array_target(target, structure_by_name, structure_by_index, replacement_map, args["column_mode"])
+                indices = parse_array_target(target, structure_by_name, structure_params_array, replacement_map, args["column_mode"])
                 if indices:
                     group_indices.extend(indices)
                     # Get variable name for display
                     if target.isdigit():
-                        var_name = structure_by_index[int(target)]
+                        var_name = structure_params_array[int(target)]
                     elif '[' in target:
                         # Extract variable name from array notation
                         var_name = target.split('[')[0]
@@ -470,7 +470,7 @@ if __name__ == '__main__':
         if isinstance(group_indices[0], int):
             # group_indices contains actual column indices
             indexs = group_indices
-            names = [structure_by_index[i] for i in group_indices]
+            names = [structure_params_array[i] for i in group_indices]
             titles = list(set(names))  # Unique variable names for title
         else:
             # Legacy format - group_names contains variable names
