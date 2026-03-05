@@ -20,11 +20,17 @@ pip install py-gnuplot==1.3 matplotlib pandas pycparser
 
 ### Basic Example
 
-Plot two graphs: columns 3 & 17 in the first graph, and `position_error` in the second graph:
+* Plot two graphs: columns with same name as column `3` or `17` in the first graph, and `position_error` in the second graph:
 
-```sh
-python plot_data.py --structure_file=data_structure/example.txt --data_file=data/example.txt --target=3,17:position_error
-```
+    ```sh
+    python plot_data.py --structure_file=data_structure/example.txt --data_file=data/example.txt --target=3,17:position_error
+    ```
+
+* Plot `position_error[2]` only:
+
+    ```sh
+    python plot_data.py --structure_file=data_structure/example.txt --data_file=data/example.txt --target=position_error[2] --column_mode
+    ```
 
 ### Arguments
 
