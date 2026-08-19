@@ -1,0 +1,46 @@
+for (int i = 0; i < robot.arm_size[0]; i++)
+{
+    for (int j = 0; j < robot.joint_size[i]; j++)
+    {
+        out << set_velocity[i][j] << ' ';
+    }
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << read_position[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << read_velocity[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << position_error[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << kp_velocity[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << max_velocity_bound[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << max_acceleration_bound[i] << ' ';
+}
+
+for (int i = 0; i < NUM_JOINTS; i++)
+{
+    out << curobo_command_ptr->JointPosCmd[i] << ' ';
+}
+
+out << status << ' ' << t1 << ' ' << t2 << ' '
+    << receiver_communication_time << ' ' << receiver_running_time;
+out << '\n';

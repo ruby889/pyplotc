@@ -1,6 +1,6 @@
-for (int i = 0; i < NUM_ARM; i++)
+for (int i = 0; i < robot.arm_size[2]; i++)
 {
-    for (int j = 0; j < JOINTS_PER_ARM; i++)
+    for (int j = 0; j < robot.joint_size[i]; i++)
     {
         fprintf(fwrite_data, "%f ", set_velocity[i][j]);
     }

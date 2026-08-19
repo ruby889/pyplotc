@@ -1,5 +1,5 @@
 {
-    "NUM_JOINTS": 14,
-    "NUM_ARM": 2,
-    "JOINTS_PER_ARM": 7
+    "NUM_JOINTS": 6,
+    "robot.arm_size[0]": 2,
+    "robot.joint_size[i]": 3
 }
