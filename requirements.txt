@@ -1,0 +1,10 @@
+# Python dependencies for pyplotc
+# Install: pip install -r requirements.txt
+#
+# Optional system dependency for --plot_tool=gnuplot:
+#   sudo apt-get install gnuplot
+
+py-gnuplot==1.3
+matplotlib
+pandas
+pycparser

@@ -1,7 +1,10 @@
 import argparse
+from collections import defaultdict
 import json
 import re
 import os
+import shutil
+from pathlib import Path
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,6 +12,12 @@ from pygnuplot import gnuplot
 
 from fprintf_structure import parse_fprintf_structure
 from oss_structure import is_oss_structure, parse_oss_structure
+from telemetry_helper import column_names as telemetry_column_names
+from telemetry_helper import iter_binary_records
+
+
+def gnuplot_available():
+    return shutil.which("gnuplot") is not None
 
 def filter_by_index(all_column_indices, index_filter, target_label=""):
     if index_filter is None:
@@ -33,17 +42,31 @@ def parse_index(index_str):
     return [int(value.strip()) for value in index_str.split(',') if value.strip()]
 
 
-def parse_array_target(target_str, structure_by_name, structure_by_index, replacement_map, index_filter=None):
+def parse_array_target(
+    target_str,
+    structure_by_name,
+    structure_by_index,
+    replacement_map,
+    index_filter=None,
+    column_mode=False,
+):
     """Parse target string that may contain array indexing.
 
     When index_filter is set (e.g. [0, 1]), each expanded same-name variable list
     is limited to those flat positions. Not global column numbers. Explicit bracket
     syntax such as set_velocity[2] is unchanged.
+
+    When column_mode is True, numeric targets refer to direct column indices.
     """
     target_str = target_str.strip()
 
     if target_str.isdigit():
         col_index = int(target_str)
+        if column_mode:
+            if col_index < len(structure_by_index):
+                return [col_index]
+            print(f"Warning: Column index {col_index} out of range (max: {len(structure_by_index)-1})")
+            return []
         if col_index < len(structure_by_index):
             var_name = structure_by_index[col_index]
             if var_name in structure_by_name:
@@ -157,6 +180,63 @@ def read_struct(structure_file, replacement_map):
 
     return build_structure_map(ordered_param_indexes)
 
+
+def _semantic_column_name(column_name: str) -> str:
+    """Map a flat telemetry column name to a plottable group alias."""
+    match = re.match(r"(?:arm|gripper)\d+_j\d+_(.+)", column_name)
+    if match:
+        return match.group(1)
+    if re.match(r"arm\d+_tool_pose\d+$", column_name):
+        return "tool_pose"
+    match = re.match(r"arm\d+_(task_.+?)\d+$", column_name)
+    if match:
+        return match.group(1)
+    return column_name
+
+
+def build_structure_from_columns(columns):
+    """Build name->column-index maps from telemetry binary column names."""
+    structure_by_name = defaultdict(list)
+    primary_groups = []
+    seen_groups = set()
+
+    for i, name in enumerate(columns):
+        structure_by_name[name].append(i)
+        semantic = _semantic_column_name(name)
+        if semantic != name:
+            structure_by_name[semantic].append(i)
+        if semantic not in seen_groups:
+            seen_groups.add(semantic)
+            primary_groups.append(semantic)
+
+    return dict(structure_by_name), list(columns), primary_groups
+
+
+def load_binary_dataframe(data_file_path):
+    """Load CTLG telemetry .bin into a DataFrame."""
+    header, rows = iter_binary_records(Path(data_file_path))
+    columns = telemetry_column_names(header)
+    data = list(rows)
+    if not data:
+        raise ValueError(
+            f"No telemetry records in '{data_file_path}' "
+            f"(file has header only: version={header.version}, "
+            f"record_size={header.record_size}). "
+            "Capture a longer run or use a .bin that contains record payloads."
+        )
+    df = pd.DataFrame(data, columns=columns)
+    df = df.apply(pd.to_numeric, errors="coerce")
+    return df, columns, header
+
+
+def _feed_gnuplot_datablock(g, df):
+    """Load DataFrame into a gnuplot named data block (no temp file)."""
+    g.cmd("$Data << EOD")
+    for line in df.to_csv(sep=" ", header=False, index=False).splitlines():
+        g.cmd(line)
+    g.cmd("EOD")
+
+
 def plot_with_matplotlib(figure_indexs, figure_names, figure_titles, frame_indexs, df):
     start, end = frame_indexs
     for figure_i in range(len(figure_indexs)):
@@ -166,7 +246,17 @@ def plot_with_matplotlib(figure_indexs, figure_names, figure_titles, frame_index
         plt.legend(labels)
     plt.show()
 
-def plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, data_file_path):
+def plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, data_file_path=None, df=None):
+    """Plot with gnuplot from a text file path, or from an in-memory DataFrame."""
+    if not gnuplot_available():
+        raise RuntimeError(
+            "gnuplot executable not found in PATH. "
+            "Install it (e.g. `sudo apt-get install gnuplot`) "
+            "or use --plot_tool=matplotlib"
+        )
+    if data_file_path is None and df is None:
+        raise ValueError("plot_with_gnuplot requires data_file_path or df")
+
     start, end = frame_indexs
     figures = []
     for figure_i in range(len(figure_indexs)):
@@ -175,11 +265,17 @@ def plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, 
         g.cmd(f'set xrange [{start}:{end}]')
         g.cmd(f'set title "{figure_titles[figure_i]}" noenhanced')
 
+        if df is not None:
+            _feed_gnuplot_datablock(g, df)
+            source = "$Data"
+        else:
+            source = f"'{data_file_path}'"
+
         cmd = 'plot '
         names = figure_names[figure_i]
         for i, x in enumerate(figure_indexs[figure_i]):
-            filename = data_file_path if i == 0 else ""
-            cmd += f"'{filename}' using {x+1} w l title '{x}: {names[i]}' noenhanced, "
+            plot_source = source if i == 0 else ""
+            cmd += f"{plot_source} using {x+1} w l title '{x}: {names[i]}' noenhanced, "
         g.cmd(cmd)
     input("Press Enter to continue...")
 
@@ -198,12 +294,13 @@ def parse_arguments():
         description="Plot data from structure and data files with optional settings."
     )
 
-    parser.add_argument("--structure_file",     type=str, default=None, help="Path to the structure file")
-    parser.add_argument("--data_file",          type=str, help="Path to the data file (relative to --data_directory when set)")
+    parser.add_argument("--structure_file",     type=str, default=None, help="Path to the structure file (optional for .bin telemetry)")
+    parser.add_argument("--data_file",          type=str, help="Path to the data file (.txt space-separated or .bin CTLG telemetry; relative to --data_directory when set)")
     parser.add_argument("--data_directory",     type=str, default=None, help="Optional directory prepended to --data_file")
     parser.add_argument("--replacement_file",   type=str, default='replacement.json', help="Path to the JSON file for macro/variable replacement in the structure file")
     parser.add_argument("--target",             type=str, help="Comma-separated list of columns or variable names to plot. Use ':' to separate different graphs. Supports flat array indexing: 'set_velocity[2]' picks the 0-based flattened element 2.")
     parser.add_argument("--index",              type=str, default=None, help="Optional comma-separated flat indices (e.g. '0,1') applied per same-name variable to limit expanded columns. Not global column numbers. Explicit targets like set_velocity[2] are unchanged.")
+    parser.add_argument("--column_mode",        action="store_true", help="When enabled, numbers in target refer to direct column indices instead of variable names")
     parser.add_argument("--start_frame",        type=int, default=0, help="Start index of frame")
     parser.add_argument("--end_frame",          type=int, default=0, help="Last index of frame")
     parser.add_argument("--plot_tool",          type=str, default='gnuplot', help="Choose 'gnuplot' or 'matplotlib' for plotting (default: gnuplot)")
@@ -211,50 +308,70 @@ def parse_arguments():
     args = parser.parse_args()
 
     data_file_path = resolve_data_file_path(args.data_file, args.data_directory)
+    is_binary = Path(data_file_path).suffix.lower() == ".bin"
 
     structure_file_path = None
     if args.structure_file:
         structure_file_path = os.path.expanduser(args.structure_file)
         if not os.path.exists(structure_file_path):
             raise FileNotFoundError(f"structure_file '{structure_file_path}' does not exist.")
+    elif not is_binary:
+        pass  # resolve_column_structure validates structure/header later
      
     return {
         "structure_file": structure_file_path,
         "data_file": data_file_path,
+        "is_binary": is_binary,
         "start_frame": args.start_frame,
         "end_frame": args.end_frame,
         "target": args.target,
         "index": args.index,
+        "column_mode": args.column_mode,
         "plot_tool": args.plot_tool,
         "replacement_file": args.replacement_file
     }
 
 if __name__ == '__main__':
     args = parse_arguments()
-    
-    #Add replacement map
-    replacement_map = read_replacement_map(args["replacement_file"])
 
-    structure_file_path = args["structure_file"]
     data_file_path = args["data_file"]
-    print(f"Structure file: {structure_file_path or '(not provided)'}")
+    is_binary = args["is_binary"]
+    structure_file_path = args["structure_file"]
     print(f"Data file: {data_file_path}")
+    if args["column_mode"]:
+        print("Column mode enabled: numbers in target refer to direct column indices")
     index_filter = parse_index(args["index"])
     if index_filter is not None:
         print(f"Index filter: {index_filter}")
 
-    structure_by_name, structure_params_array, skip_data_header, column_source = resolve_column_structure(
-        structure_file_path, data_file_path, replacement_map
-    )
-    print(f"Using columns from {column_source}")
+    if is_binary:
+        df, columns, header = load_binary_dataframe(data_file_path)
+        structure_by_name, structure_params_array, primary_groups = build_structure_from_columns(columns)
+        print(
+            f"Binary telemetry: version={header.version}, "
+            f"arms={header.arm_size}, joints={header.arm_joint_size}, "
+            f"records={df.shape[0]}, columns={df.shape[1]}"
+        )
+        if args["structure_file"]:
+            print("Note: structure_file is ignored for .bin data (using telemetry column schema)")
+        replacement_map = {}
+        column_source = "binary telemetry header"
+    else:
+        replacement_map = read_replacement_map(args["replacement_file"])
+        print(f"Structure file: {structure_file_path or '(not provided)'}")
+        structure_by_name, structure_params_array, skip_data_header, column_source = resolve_column_structure(
+            structure_file_path, data_file_path, replacement_map
+        )
+        primary_groups = list(structure_by_name.keys())
+        df = read_data_file(data_file_path, skip_header=skip_data_header)
 
+    print(f"Using columns from {column_source}")
     print(f"\nstructure_params_array: {structure_params_array}\n")
     print(f"structure_by_name: {structure_by_name}\n")
 
-    df = read_data_file(data_file_path, skip_header=skip_data_header)
     data_col_count = df.shape[1]
 
-    if data_col_count != len(structure_params_array):
+    if not is_binary and data_col_count != len(structure_params_array):
         if structure_file_path:
             raise ValueError(
                 f"Column count mismatch: data file has {data_col_count} columns, "
@@ -288,7 +405,7 @@ if __name__ == '__main__':
     if not args["target"]: #Plot all data
         group_names_per_figure = [
             filter_plottable_indices(structure_by_name[graph], graph)
-            for graph in structure_by_name.keys()
+            for graph in primary_groups
         ]
         group_names_per_figure = [g for g in group_names_per_figure if g]
     else: #Plot data specified by user
@@ -301,7 +418,7 @@ if __name__ == '__main__':
                 indices = filter_plottable_indices(
                     parse_array_target(
                         target, structure_by_name, structure_params_array,
-                        replacement_map, index_filter
+                        replacement_map, index_filter, args["column_mode"]
                     ),
                     target,
                 )
@@ -341,10 +458,21 @@ if __name__ == '__main__':
     print("figure_indexs: ", figure_indexs)
     print("figure_names: ", figure_names)
     print("figure_titles: ", figure_titles)
-    #plot data
-    if (args["plot_tool"] == 'gnuplot'):
-        plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, data_file_path)
-    elif (args["plot_tool"] == 'matplotlib'):
+    plot_tool = args["plot_tool"]
+    if plot_tool == "gnuplot" and not gnuplot_available():
+        print(
+            "Warning: gnuplot not found in PATH; falling back to matplotlib. "
+            "Install with `sudo apt-get install gnuplot` to use gnuplot."
+        )
+        plot_tool = "matplotlib"
+
+    if plot_tool == "gnuplot":
+        if is_binary:
+            plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, df=df)
+        else:
+            plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, data_file_path=data_file_path)
+    elif plot_tool == "matplotlib":
         plot_with_matplotlib(figure_indexs, figure_names, figure_titles, frame_indexs, df)
-    
+    else:
+        raise ValueError(f"Unsupported plot_tool: {args['plot_tool']}")
     

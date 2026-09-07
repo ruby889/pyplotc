@@ -10,13 +10,28 @@ Plotting is available through Gnuplot or Matplotlib.
   - `fprintf` format via `fprintf_structure.py`
   - `std::ostringstream` data-writing format via `oss_structure.py`
 - **Optional `#` header line** in data files for explicit column names (for example `arm0_j0_set_velocity`)
+- **Binary CTLG telemetry** (`.bin`) with column schema from file header via `telemetry_helper.py`
 - **Flexible plotting**: select columns by index or variable name, split series into multiple graphs with `:`
 - **Supports Gnuplot and Matplotlib**
 
 ## Installation
 
+Install Python dependencies:
+
+```sh
+pip install -r requirements.txt
+```
+
+Or install packages individually:
+
 ```sh
 pip install py-gnuplot==1.3 matplotlib pandas pycparser
+```
+
+For Gnuplot plotting (`--plot_tool=gnuplot`), also install the system `gnuplot` executable:
+
+```sh
+sudo apt-get install gnuplot
 ```
 
 ## Column Mapping Priority
@@ -82,16 +97,36 @@ python plot_data.py \
 
 Use the exact names from the header row when targeting specific joints or array elements.
 
+### Example 4: Binary CTLG telemetry (`.bin`)
+
+Binary telemetry files carry their own column schema in the CTLG header. No structure file is required:
+
+```sh
+python plot_data.py \
+  --data_file=data/telemetry.bin \
+  --target=motor_target,joint_velocity \
+  --plot_tool=matplotlib
+```
+
+Semantic aliases are derived from column names (for example `arm0_j0_motor_target` → `motor_target`). Use `--column_mode` to plot by direct column index.
+
+Convert `.bin` or `.txt` telemetry to CSV with:
+
+```sh
+python telemetry_helper.py input.bin -o output.csv
+```
+
 ## Arguments
 
 | Argument | Description |
 |---|---|
-| `--structure_file` | Optional path to a C/C++ structure snippet (`fprintf` or `ostringstream`) |
-| `--data_file` | Path to the space-separated data file |
+| `--structure_file` | Optional path to a C/C++ structure snippet (`fprintf` or `ostringstream`); not used for `.bin` telemetry |
+| `--data_file` | Path to the data file (space-separated `.txt` or CTLG `.bin`) |
 | `--data_directory` | Optional directory prepended to `--data_file` (resolved as `data_directory/data_file`) |
 | `--replacement_file` | JSON macro replacements for loops in structure files (default: `replacement.json`) |
 | `--target` | Comma-separated columns or variable names; use `:` for separate graphs |
 | `--index` | Optional comma-separated flat indices (e.g. `0,1`) applied **per same-name variable** to limit expanded columns |
+| `--column_mode` | When set, numeric targets refer to direct column indices instead of variable-name lookup |
 | `--start_frame` | Start row index (default: `0`) |
 | `--end_frame` | End row index (default: all rows) |
 | `--plot_tool` | `gnuplot` (default) or `matplotlib` |
@@ -214,8 +249,10 @@ Example header + data:
 ```text
 pyplotc/
 ├── plot_data.py           # CLI entry point
+├── telemetry_helper.py    # CTLG binary telemetry parser / CSV converter
 ├── fprintf_structure.py   # fprintf parser
 ├── oss_structure.py       # ostringstream data parser
+├── requirements.txt       # Python dependencies
 ├── replacement.json
 ├── data_structure/
 │   ├── example.txt
