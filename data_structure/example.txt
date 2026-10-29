@@ -1,4 +1,4 @@
-for (int i = 0; i < robot.arm_size[2]; i++)
+for (int i = 0; i < robot.arm_size[0]; i++)
 {
     for (int j = 0; j < robot.joint_size[i]; i++)
     {
@@ -21,9 +21,12 @@ for (int i = 0; i < NUM_JOINTS; i++)
     fprintf(fwrite_data, "%f ", position_error[i]);
 }
 
-for (int i = 0; i < NUM_JOINTS; i++)
+for (int i = 0; i < robot.arm_size[0]; i++)
 {
-    fprintf(fwrite_data, "%f ", kp_velocity[i]);
+    for (int j = 0; j < robot.uneven_joint_size[i]; i++)
+    {
+        fprintf(fwrite_data, "%f ", kp_velocity[i]);
+    }
 }
 
 for (int i = 0; i < NUM_JOINTS; i++)

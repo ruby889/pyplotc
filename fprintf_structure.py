@@ -4,6 +4,8 @@ import re
 
 from pycparser import c_parser, c_ast
 
+from structure_preprocess import preprocess_structure_code
+
 
 class CCodeVisitor(c_ast.NodeVisitor):
     """AST visitor to extract fprintf statements and for loops from C code."""
@@ -102,10 +104,10 @@ class CCodeVisitor(c_ast.NodeVisitor):
         return str(node)
 
 
-def parse_c_code_with_pycparser(code_content, replacement_map):
+def parse_c_code_with_pycparser(code_content, replacement_map, *, preprocess=True):
     try:
-        for key, val in replacement_map.items():
-            code_content = code_content.replace(key, str(val))
+        if preprocess:
+            code_content = preprocess_structure_code(code_content, replacement_map)
 
         preprocessed_code = """
             int fprintf(void* stream, const char* format, ...);
@@ -164,5 +166,7 @@ def extract_fprintf_calls(fprintf_calls):
 
 
 def parse_fprintf_structure(code_content, replacement_map):
-    fprintf_calls = parse_c_code_with_pycparser(code_content, replacement_map)
+    fprintf_calls = parse_c_code_with_pycparser(
+        code_content, replacement_map, preprocess=True
+    )
     return extract_fprintf_calls(fprintf_calls)

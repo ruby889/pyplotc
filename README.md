@@ -223,9 +223,12 @@ Each output value must be separated by spaces so columns align with the data fil
 {
     "NUM_JOINTS": 6,
     "robot.arm_size[0]": 2,
-    "robot.joint_size[i]": 3
+    "robot.joint_size[i]": 3,
+    "robot.uneven_joint_size[i]": [2, 4]
 }
 ```
+
+Scalars replace every occurrence in the structure text; arrays supply one bound per loop index (`[2, 4]` → `2` when `i == 0`, `4` when `i == 1`). List length must match the outer loop count (here `robot.arm_size[0]`). Arrays are applied when `structure_preprocess.py` unrolls `for` loops.
 
 ## Data Files
 
@@ -250,6 +253,7 @@ Example header + data:
 pyplotc/
 ├── plot_data.py           # CLI entry point
 ├── telemetry_helper.py    # CTLG binary telemetry parser / CSV converter
+├── structure_preprocess.py  # replacement.json + for-loop unrolling (shared)
 ├── fprintf_structure.py   # fprintf parser
 ├── oss_structure.py       # ostringstream data parser
 ├── requirements.txt       # Python dependencies

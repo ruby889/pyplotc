@@ -125,6 +125,8 @@ def read_replacement_map(replacement_file):
         replacement_map = json.load(file)
         
     for key, val in replacement_map.items():
+        if isinstance(val, list):
+            continue
         if not isinstance(val, str):
             replacement_map[key] = str(val)
     return replacement_map
@@ -271,12 +273,12 @@ def plot_with_gnuplot(figure_indexs, figure_names, figure_titles, frame_indexs, 
         else:
             source = f"'{data_file_path}'"
 
-        cmd = 'plot '
         names = figure_names[figure_i]
-        for i, x in enumerate(figure_indexs[figure_i]):
-            plot_source = source if i == 0 else ""
-            cmd += f"{plot_source} using {x+1} w l title '{x}: {names[i]}' noenhanced, "
-        g.cmd(cmd)
+        plot_parts = [
+            f"{source} using {col + 1} w l title '{col}: {names[i]}' noenhanced"
+            for i, col in enumerate(figure_indexs[figure_i])
+        ]
+        g.cmd("plot " + ", ".join(plot_parts))
     input("Press Enter to continue...")
 
 def resolve_data_file_path(data_file, data_directory=None):
